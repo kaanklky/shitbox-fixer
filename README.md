@@ -43,8 +43,17 @@ TUYA_ACCESS_ID=your_access_id
 TUYA_ACCESS_KEY=your_access_key
 TUYA_REGION=eu
 TUYA_DEVICE_ID=your_device_id
+SHUTDOWN_DELAY=0
 DEBUG=false
 ```
+
+Environment variables:
+- `TUYA_ACCESS_ID` - Your Tuya Cloud access ID (required)
+- `TUYA_ACCESS_KEY` - Your Tuya Cloud access key (required)
+- `TUYA_REGION` - API region (default: `eu`)
+- `TUYA_DEVICE_ID` - Your device ID (required)
+- `SHUTDOWN_DELAY` - Sleep before exit for scheduled loops (default: `0`, e.g., `1m`, `30s`)
+- `DEBUG` - Enable verbose logging (default: `false`)
 
 Available regions:
 - `eu` - Europe (default)
@@ -97,6 +106,32 @@ Or use an env file:
 ```bash
 docker run --rm --env-file .env ghcr.io/kaanklky/shitbox-fixer:latest
 ```
+
+#### Docker with Scheduled Loop
+
+Use `--restart always` with `SHUTDOWN_DELAY` to run the application in a continuous loop:
+
+```bash
+docker run -d \
+  --name shitbox-fixer \
+  --restart always \
+  -e TUYA_ACCESS_ID=your_access_id \
+  -e TUYA_ACCESS_KEY=your_access_key \
+  -e TUYA_REGION=eu \
+  -e TUYA_DEVICE_ID=your_device_id \
+  -e SHUTDOWN_DELAY=1m \
+  -e DEBUG=false \
+  ghcr.io/kaanklky/shitbox-fixer:latest
+```
+
+This will:
+1. Run the device check
+2. Sleep for the specified duration (e.g., `1m`, `30s`, `5m`)
+3. Exit
+4. Docker automatically restarts the container (due to `--restart always`)
+5. Repeat from step 1
+
+Valid duration formats: `30s`, `1m`, `5m`, `1h`, `90m`, etc.
 
 ### Scheduled Execution
 

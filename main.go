@@ -24,11 +24,12 @@ var (
 )
 
 type Config struct {
-  AccessID  string
-  AccessKey string
-  Region    string
-  DeviceID  string
-  Debug     bool
+  AccessID       string
+  AccessKey      string
+  Region         string
+  DeviceID       string
+  ShutdownDelay  time.Duration
+  Debug          bool
 }
 
 var regionConfig = map[string]struct {
@@ -94,11 +95,12 @@ func loadEnvFile(filepath string) error {
 
 func loadConfig() (*Config, error) {
   cfg := &Config{
-    AccessID:  os.Getenv("TUYA_ACCESS_ID"),
-    AccessKey: os.Getenv("TUYA_ACCESS_KEY"),
-    Region:    os.Getenv("TUYA_REGION"),
-    DeviceID:  os.Getenv("TUYA_DEVICE_ID"),
-    Debug:     os.Getenv("DEBUG") == "true",
+    AccessID:      os.Getenv("TUYA_ACCESS_ID"),
+    AccessKey:     os.Getenv("TUYA_ACCESS_KEY"),
+    Region:        os.Getenv("TUYA_REGION"),
+    DeviceID:      os.Getenv("TUYA_DEVICE_ID"),
+    ShutdownDelay: 0,
+    Debug:         os.Getenv("DEBUG") == "true",
   }
 
   if cfg.AccessID == "" || cfg.AccessKey == "" || cfg.DeviceID == "" {
@@ -111,6 +113,15 @@ func loadConfig() (*Config, error) {
 
   if _, ok := regionConfig[cfg.Region]; !ok {
     return nil, fmt.Errorf("invalid region: %s (valid: eu, us, cn, in)", cfg.Region)
+  }
+
+  shutdownDelayStr := os.Getenv("SHUTDOWN_DELAY")
+  if shutdownDelayStr != "" {
+    duration, err := time.ParseDuration(shutdownDelayStr)
+    if err != nil {
+      return nil, fmt.Errorf("invalid SHUTDOWN_DELAY: %w", err)
+    }
+    cfg.ShutdownDelay = duration
   }
 
   return cfg, nil
@@ -381,5 +392,12 @@ func main() {
     appLog.Println("Control command sent successfully")
   } else {
     appLog.Println("Device is working properly, no action needed")
+  }
+
+  if cfg.ShutdownDelay > 0 {
+    if cfg.Debug {
+      appLog.Printf("Sleeping for %s before exit...\n", cfg.ShutdownDelay)
+    }
+    time.Sleep(cfg.ShutdownDelay)
   }
 }
