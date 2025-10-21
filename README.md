@@ -130,15 +130,15 @@ You can customize the `needsReset()` function in `main.go` to match your needs.
 Example: Check for specific status conditions
 ```go
 func needsReset(deviceInfo *DeviceInfoResponse, lastLogs []interface{}) bool {
-    for _, logEntry := range lastLogs {
-        if logMap, ok := logEntry.(map[string]interface{}); ok {
-            if value, ok := logMap["value"].(string); ok && value == "Error_State" {
-                return true
-            }
-        }
+  for _, logEntry := range lastLogs {
+    if logMap, ok := logEntry.(map[string]interface{}); ok {
+      if value, ok := logMap["value"].(string); ok && value == "Error_State" {
+        return true
+      }
     }
+  }
 
-    return false
+  return false
 }
 ```
 
