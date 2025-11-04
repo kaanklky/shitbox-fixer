@@ -1,10 +1,10 @@
 # Shitbox Fixer - Tuya Device Monitor
 
-A Go-based monitoring tool for Tuya smart devices that automatically detects and fixes stuck states. Specifically designed to monitor a cat litter box device that occasionally gets stuck in "Clean_Pause" state because of a defective weight sensor.
+A Python-based monitoring tool for Tuya smart devices that automatically detects and fixes stuck states using local API. Specifically designed to monitor a cat litter box device that occasionally gets stuck in "Clean_Pause" state because of a defective gravity sensor.
 
 ## Purpose
 
-This application monitors a Tuya-enabled smart device and automatically resets it when the device enters a "Clean_Pause" state (detected from device logs in the last 10 minutes).
+This application monitors a Tuya-enabled smart device locally (without cloud) and automatically resets it when the device enters a "Clean_Pause" state.
 
 When a reset is needed, it performs a complete reset sequence:
 1. Sends OFF command (switch = false)
@@ -15,123 +15,82 @@ When a reset is needed, it performs a complete reset sequence:
 
 ## Requirements
 
-- Go 1.18+
-- Tuya Cloud account and API credentials
+- Python 3.7+
+- Device on the same local network
+- Device local key (obtained from Tuya Cloud)
 
 ## Installation
 
-### 1. Tuya Cloud Setup
+### 1. Get Local Key
+
+You need the device local key to communicate with the device locally. You can obtain it from Tuya IoT Platform:
 
 1. Go to https://iot.tuya.com
-2. Click on Cloud > Development
-3. Create a new Cloud Project
-4. Click on the project and get Access ID and Access Key from "Authorization Key" section
-5. Link your mobile app account using "Link Tuya App Account"
-6. Get your device ID from the "Devices" tab
+2. Create a Cloud Project (you only need this once to get the key)
+3. Link your Tuya app account
+4. Go to Devices tab and find your device
+5. Copy the Device ID and Local Key
 
-### 2. Project Setup
+### 2. Find Device IP Address
+
+Find your device's local IP address from your router's admin panel or use:
 
 ```bash
-git clone <repo_url>
+nmap -p 6668 192.168.1.0/24
+```
+
+### 3. Project Setup
+
+```bash
+git clone git@github.com:kaanklky/shitbox-fixer.git
 cd shitbox-fixer
+git checkout feature/local-api
+pip3 install -r requirements.txt
 cp .env.example .env
 ```
 
 Edit the `.env` file:
 ```
-TUYA_ACCESS_ID=your_access_id
-TUYA_ACCESS_KEY=your_access_key
-TUYA_REGION=eu
-TUYA_DEVICE_ID=your_device_id
-SHUTDOWN_DELAY=0
+DEVICE_IP=192.168.2.221
+DEVICE_ID=your_device_id_here
+LOCAL_KEY=your_local_key_here
+PROTOCOL_VERSION=3.4
 DEBUG=false
+SHUTDOWN_DELAY=0
 ```
 
 Environment variables:
-- `TUYA_ACCESS_ID` - Your Tuya Cloud access ID (required)
-- `TUYA_ACCESS_KEY` - Your Tuya Cloud access key (required)
-- `TUYA_REGION` - API region (default: `eu`)
-- `TUYA_DEVICE_ID` - Your device ID (required)
-- `SHUTDOWN_DELAY` - Sleep before exit for scheduled loops (default: `0`, e.g., `1m`, `30s`)
+- `DEVICE_IP` - Device local IP address (required)
+- `DEVICE_ID` - Your device ID from Tuya platform (required)
+- `LOCAL_KEY` - Device local key from Tuya platform (required)
+- `PROTOCOL_VERSION` - Tuya protocol version (default: `3.4`)
 - `DEBUG` - Enable verbose logging (default: `false`)
-
-Available regions:
-- `eu` - Europe (default)
-- `us` - United States
-- `cn` - China
-- `in` - India
-
-### 3. Build
-
-```bash
-go build -o shitbox-fixer
-```
+- `SHUTDOWN_DELAY` - Sleep before exit for scheduled loops (default: `0`, e.g., `1m`, `30s`)
 
 ## Usage
 
 ### Check Version
 
 ```bash
-./shitbox-fixer version
+python3 main.py version
 ```
 
 ### One-time Execution
 
 ```bash
-./shitbox-fixer
+python3 main.py
 ```
 
-### Docker
+### Building Standalone Binary
 
-Pull the latest image from GitHub Container Registry:
+Use PyInstaller to create a standalone executable:
 
 ```bash
-docker pull ghcr.io/kaanklky/shitbox-fixer:latest
+pip3 install pyinstaller
+pyinstaller --onefile --name shitbox-fixer main.py
 ```
 
-Run with environment variables:
-
-```bash
-docker run --rm \
-  -e TUYA_ACCESS_ID=your_access_id \
-  -e TUYA_ACCESS_KEY=your_access_key \
-  -e TUYA_REGION=eu \
-  -e TUYA_DEVICE_ID=your_device_id \
-  -e DEBUG=false \
-  ghcr.io/kaanklky/shitbox-fixer:latest
-```
-
-Or use an env file:
-
-```bash
-docker run --rm --env-file .env ghcr.io/kaanklky/shitbox-fixer:latest
-```
-
-#### Docker with Scheduled Loop
-
-Use `--restart always` with `SHUTDOWN_DELAY` to run the application in a continuous loop:
-
-```bash
-docker run -d \
-  --name shitbox-fixer \
-  --restart always \
-  -e TUYA_ACCESS_ID=your_access_id \
-  -e TUYA_ACCESS_KEY=your_access_key \
-  -e TUYA_REGION=eu \
-  -e TUYA_DEVICE_ID=your_device_id \
-  -e SHUTDOWN_DELAY=1m \
-  -e DEBUG=false \
-  ghcr.io/kaanklky/shitbox-fixer:latest
-```
-
-This will:
-1. Run the device check
-2. Sleep for the specified duration (e.g., `1m`, `30s`, `5m`)
-3. Exit
-4. Docker automatically restarts the container (due to `--restart always`)
-5. Repeat from step 1
-
-Valid duration formats: `30s`, `1m`, `5m`, `1h`, `90m`, etc.
+The binary will be in `dist/shitbox-fixer` and can be deployed to any system without Python installed.
 
 ### Scheduled Execution
 
@@ -139,42 +98,47 @@ This application is designed to be run periodically using cron, systemd timers, 
 
 ## How It Works
 
-1. Retrieves device status from Tuya API
-2. Checks device logs for the last 10 minutes
-3. If "Clean_Pause" state is detected in logs:
+1. Connects to device via local network (TCP port 6668)
+2. Retrieves device status using Tuya local protocol
+3. Checks if device is in "Clean_Pause" state
+4. If detected, sends reset sequence:
    - Sends OFF command (switch = false)
    - Waits 1 second
    - Sends ON command (switch = true)
    - Waits 2 seconds
-   - Sends manual clean command
-4. All operations are logged
+   - Sends manual clean command (triggers gravity sensor)
+5. All operations are logged
 
 ## Debug Mode
 
 Set `DEBUG=true` in `.env` to enable verbose logging:
 - Device status with all data points
-- Last 5 device logs with timestamps
-- Detailed command execution steps
+- Command execution details
+- Protocol-level debugging
 
 Set `DEBUG=false` for production to only show essential info messages.
 
 ## Customization
 
-You can customize the `needsReset()` function in `main.go` to match your needs.
+You can customize the `needs_reset()` function in `main.py` to match your needs.
 
 Example: Check for specific status conditions
-```go
-func needsReset(deviceInfo *DeviceInfoResponse, lastLogs []interface{}) bool {
-  for _, logEntry := range lastLogs {
-    if logMap, ok := logEntry.(map[string]interface{}); ok {
-      if value, ok := logMap["value"].(string); ok && value == "Error_State" {
-        return true
-      }
-    }
-  }
+```python
+def needs_reset(status):
+  if not status or 'dps' not in status:
+    return False
 
-  return false
-}
+  dps = status['dps']
+  operation = dps.get('110')
+  return operation == 'Error_State'
 ```
 
-To modify the control commands, edit the `controlDevice()` function.
+To modify the control commands, edit the `control_device()` function.
+
+## Technical Details
+
+This application uses the tinytuya library which implements Tuya local protocol:
+- Protocol: Tuya Protocol 3.4
+- Encryption: AES-128-ECB with MD5-hashed local key
+- Transport: TCP on port 6668
+- No cloud dependencies, no API limits, completely free to use
