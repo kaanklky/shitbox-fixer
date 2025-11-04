@@ -2,6 +2,8 @@
 
 A Go-based monitoring tool for Tuya smart devices that automatically detects and fixes stuck states. Specifically designed to monitor a cat litter box device that occasionally gets stuck in "Clean_Pause" state because of a defective weight sensor.
 
+> Check `feature/local-api` branch to see Python version of same idea which is working locally.
+
 ## Purpose
 
 This application monitors a Tuya-enabled smart device and automatically resets it when the device enters a "Clean_Pause" state (detected from device logs in the last 10 minutes).
@@ -32,7 +34,7 @@ When a reset is needed, it performs a complete reset sequence:
 ### 2. Project Setup
 
 ```bash
-git clone <repo_url>
+git clone git@github.com:kaanklky/shitbox-fixer.git
 cd shitbox-fixer
 cp .env.example .env
 ```
