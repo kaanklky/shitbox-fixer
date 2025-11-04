@@ -4,7 +4,6 @@ import os
 import sys
 import time
 import json
-import logging
 from pathlib import Path
 
 try:
@@ -45,7 +44,7 @@ def format_dps_value(key, value):
 
 def format_status(status):
   if not status or 'dps' not in status:
-    return status
+    return {}
 
   dps = status['dps']
   formatted = {}
@@ -55,22 +54,7 @@ def format_status(status):
     formatted_value = format_dps_value(key, value)
     formatted[field_name] = formatted_value
 
-  return {"dps": formatted}
-
-def print_aligned_status(status):
-  if not status or 'dps' not in status:
-    return
-
-  dps = status['dps']
-  max_key_len = max(len(key) for key in dps.keys())
-
-  print("  \"dps\": {")
-  items = list(dps.items())
-  for i, (key, value) in enumerate(items):
-    comma = "," if i < len(items) - 1 else ""
-    value_str = json.dumps(value)
-    print(f"    \"{key}\"{' ' * (max_key_len - len(key))}: {value_str}{comma}")
-  print("  }")
+  return formatted
 
 def load_env(env_file=".env"):
   if not os.path.exists(env_file):
@@ -95,31 +79,13 @@ def needs_reset(status):
   operation = dps.get('110')
   return operation == 'Clean_Pause'
 
-def control_device(device, debug=False):
-  logger = logging.getLogger(__name__)
-
-  if debug:
-    logger.info("Sending OFF command...")
+def control_device(device):
   device.set_value(1, False)
-
-  if debug:
-    logger.info("Device turned OFF, waiting 1 second...")
   time.sleep(1)
-
-  if debug:
-    logger.info("Sending ON command...")
   device.set_value(1, True)
-
-  if debug:
-    logger.info("Device turned ON, waiting 2 seconds...")
   time.sleep(2)
-
-  if debug:
-    logger.info("Sending CLEAN command (DPS 9: mop attached)...")
   device.set_value(9, True)
-
-  if debug:
-    logger.info("Clean command sent")
+  return "Device stuck in 'Clean_Pause' state, sending reset-clean commands consecutively."
 
 def main():
   if len(sys.argv) > 1 and sys.argv[1] == 'version':
@@ -134,24 +100,16 @@ def main():
   device_id = os.getenv('DEVICE_ID')
   local_key = os.getenv('LOCAL_KEY')
   protocol_version = os.getenv('PROTOCOL_VERSION', '3.3')
-  debug = os.getenv('DEBUG', 'false').lower() == 'true'
   shutdown_delay = os.getenv('SHUTDOWN_DELAY', '0')
 
   if not device_ip or not device_id or not local_key:
-    print("ERROR: Missing required environment variables: DEVICE_IP, DEVICE_ID, LOCAL_KEY")
+    print(json.dumps({"error": "Missing required environment variables: DEVICE_IP, DEVICE_ID, LOCAL_KEY"}))
     sys.exit(1)
-
-  if debug:
-    logging.basicConfig(level=logging.INFO, format='%(message)s')
-  else:
-    logging.basicConfig(level=logging.WARNING, format='%(message)s')
-
-  logger = logging.getLogger(__name__)
 
   try:
     version_float = float(protocol_version)
   except ValueError:
-    logger.error(f"Invalid PROTOCOL_VERSION: {protocol_version}")
+    print(json.dumps({"error": f"Invalid PROTOCOL_VERSION: {protocol_version}"}))
     sys.exit(1)
 
   device = tinytuya.Device(
@@ -164,29 +122,31 @@ def main():
   status = device.status()
 
   if not status:
-    logger.error("Failed to get device status: No response")
+    print(json.dumps({"error": "Failed to get device status: No response"}))
     sys.exit(1)
 
   if 'Error' in status:
-    logger.error(f"Failed to get device status: {status['Error']}")
+    print(json.dumps({"error": f"Failed to get device status: {status['Error']}"}))
     sys.exit(1)
 
-  if debug:
-    logger.info("========== DEVICE STATUS ==========")
-    formatted_status = format_status(status)
-    print_aligned_status(formatted_status)
-    logger.info("===================================")
+  formatted_dps = format_status(status)
+  message = ""
 
   if needs_reset(status):
-    logger.info("Device needs reset, sending control command...")
     try:
-      control_device(device, debug)
-      logger.info("Control command sent successfully")
+      message = control_device(device)
     except Exception as e:
-      logger.error(f"Failed to control device: {e}")
+      print(json.dumps({"error": f"Failed to control device: {e}"}))
       sys.exit(1)
   else:
-    logger.info("Device is working properly, no action needed")
+    message = "Device is working properly, no action needed."
+
+  output = {
+    "dps": formatted_dps,
+    "message": message
+  }
+
+  print(json.dumps(output, indent=2))
 
   if shutdown_delay and shutdown_delay != '0':
     try:
@@ -198,8 +158,7 @@ def main():
       else:
         delay_seconds = int(shutdown_delay)
 
-      if delay_seconds > 0 and debug:
-        logger.info(f"Sleeping for {delay_seconds} seconds before exit...")
+      if delay_seconds > 0:
         time.sleep(delay_seconds)
     except ValueError:
       pass
