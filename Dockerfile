@@ -1,26 +1,12 @@
-FROM golang:1.25-alpine AS builder
-
-WORKDIR /build
-
-COPY go.mod go.sum ./
-RUN go mod download
-
-COPY main.go ./
-
-ARG VERSION=dev
-ARG GIT_COMMIT=unknown
-ARG BUILD_DATE=unknown
-
-RUN go build -ldflags "-s -w -X main.Version=${VERSION} -X main.GitCommit=${GIT_COMMIT} -X main.BuildDate=${BUILD_DATE}" -o shitbox-fixer
-
-FROM alpine:latest
-
-RUN apk --no-cache add ca-certificates tzdata
+FROM python:3.13-alpine
 
 WORKDIR /app
 
-COPY --from=builder /build/shitbox-fixer /app/shitbox-fixer
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY main.py ./
 
 ENV TZ=Europe/Amsterdam
 
-ENTRYPOINT ["/app/shitbox-fixer"]
+ENTRYPOINT ["python3", "main.py"]
